@@ -94,6 +94,7 @@ func IsExistsUpWay(
 	mazeCol int,
 	mazeSolution []string,
 	mazeStartIndex int,
+	lastBadMove string,
 ) (bool, int) {
 	isExistsUpIndex := false
 	mazeUpIndex := 0
@@ -105,6 +106,7 @@ func IsExistsUpWay(
 		}
 	}
 	return isExistsUpIndex &&
+			lastBadMove != "U" &&
 			(len(mazeSolution) == 0 || len(mazeSolution) > 0 && mazeSolution[len(mazeSolution)-1] != "D"),
 		mazeUpIndex
 }
@@ -113,7 +115,9 @@ func IsExistsUpWay(
 func IsExistsDownWay(
 	mazeIndex []int,
 	mazeCol int,
+	mazeSolution []string,
 	mazeStartIndex int,
+	lastBadMove string,
 ) (bool, int) {
 	isExistsDownIndex := false
 	mazeDownIndex := 0
@@ -125,7 +129,10 @@ func IsExistsDownWay(
 		}
 	}
 
-	return isExistsDownIndex, mazeDownIndex
+	return isExistsDownIndex &&
+			lastBadMove != "D" &&
+			(len(mazeSolution) == 0 || len(mazeSolution) > 0 && mazeSolution[len(mazeSolution)-1] != "U"),
+		mazeDownIndex
 }
 
 // IsExistsRightWay checks if there is right move for the maze pointer
@@ -134,8 +141,10 @@ func IsExistsRightWay(
 	mazeSolution []string,
 	mazeStartIndex int,
 	mazeEndIndex int,
+	lastBadMove string,
 ) bool {
 	return mazeStartIndex < mazeEndIndex &&
+		lastBadMove != "R" &&
 		mazeIndex[mazeStartIndex+1]-mazeIndex[mazeStartIndex] == 1 &&
 		(len(mazeSolution) == 0 || len(mazeSolution) > 0 && mazeSolution[len(mazeSolution)-1] != "L")
 }
@@ -143,9 +152,21 @@ func IsExistsRightWay(
 // IsExistsLeftWay checks if there is left move for the maze pointer
 func IsExistsLeftWay(
 	mazeIndex []int,
+	mazeSolution []string,
 	mazeStartIndex int,
+	lastBadMove string,
 ) bool {
-	return mazeIndex[mazeStartIndex]-mazeIndex[mazeStartIndex-1] == 1
+	return mazeIndex[mazeStartIndex]-mazeIndex[mazeStartIndex-1] == 1 &&
+		lastBadMove != "L" &&
+		(len(mazeSolution) == 0 || len(mazeSolution) > 0 && mazeSolution[len(mazeSolution)-1] != "R")
+}
+
+func RemoveLastElement(
+	mazeSolution []string,
+) (string, []string) {
+	lastElement := mazeSolution[len(mazeSolution)-1]
+	removedLastElementSlice := mazeSolution[0 : len(mazeSolution)-1]
+	return lastElement, removedLastElementSlice
 }
 
 // MazeSolution finds the maze solution with the help of other defined functions
@@ -155,24 +176,47 @@ func MazeSolution(
 	mazeStartIndex int,
 	mazeEndIndex int,
 ) []string {
+	var lastMove string
+	var lastBadMove string
 	var mazeSolution []string
+
 	for mazeStartIndex != mazeEndIndex {
-		isExistsUpWay, mazeUpIndex := IsExistsUpWay(mazeIndex, mazeCol, mazeSolution, mazeStartIndex)
-		if isExistsUpWay {
+		isExistsUpWay, mazeUpIndex := IsExistsUpWay(mazeIndex, mazeCol, mazeSolution, mazeStartIndex, lastBadMove)
+		isExistsDownWay, mazeDownIndex := IsExistsDownWay(mazeIndex, mazeCol, mazeSolution, mazeStartIndex, lastBadMove)
+
+		if isExistsUpWay && lastBadMove != "U" {
 			mazeStartIndex = mazeUpIndex
 			mazeSolution = append(mazeSolution, "U")
-		} else if IsExistsRightWay(mazeIndex, mazeSolution, mazeStartIndex, mazeEndIndex) {
+		} else if IsExistsRightWay(mazeIndex, mazeSolution, mazeStartIndex, mazeEndIndex, lastBadMove) {
 			mazeStartIndex += 1
 			mazeSolution = append(mazeSolution, "R")
-		} else if IsExistsLeftWay(mazeIndex, mazeStartIndex) {
+		} else if IsExistsLeftWay(mazeIndex, mazeSolution, mazeStartIndex, lastBadMove) && lastBadMove != "L" {
 			mazeStartIndex -= 1
 			mazeSolution = append(mazeSolution, "L")
+		} else if isExistsDownWay && lastBadMove != "D" {
+			mazeStartIndex = mazeDownIndex
+			mazeSolution = append(mazeSolution, "D")
 		} else {
-			isExistsDownWay, mazeDownIndex := IsExistsDownWay(mazeIndex, mazeCol, mazeStartIndex)
-			if isExistsDownWay {
+			lastMove, mazeSolution = RemoveLastElement(mazeSolution)
+			switch lastMove {
+			case "U":
+				_, mazeDownIndex = IsExistsDownWay(mazeIndex, mazeCol, mazeSolution, mazeStartIndex, lastBadMove)
 				mazeStartIndex = mazeDownIndex
-				mazeSolution = append(mazeSolution, "D")
+			case "R":
+				mazeStartIndex -= 1
+			case "L":
+				mazeStartIndex += 1
+			case "D":
+				_, mazeUpIndex = IsExistsUpWay(mazeIndex, mazeCol, mazeSolution, mazeStartIndex, lastBadMove)
+				mazeStartIndex = mazeUpIndex
 			}
+		}
+
+		if len(lastMove) == 0 {
+			lastBadMove = ""
+		} else {
+			lastBadMove = lastMove
+			lastMove = ""
 		}
 	}
 	return mazeSolution
