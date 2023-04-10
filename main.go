@@ -6,37 +6,78 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// GetMazeCoordinates get col and row of the maze from user
-func GetMazeCoordinates() (mazeCol, mazeRow int) {
-	col, row := 0, 0
-	fmt.Print("Enter col and row of the maze: ")
-	_, err := fmt.Scan(&col, &row)
+// CreateFileScanner open the file and creates a file pointer
+func CreateFileScanner(
+	filePath string,
+) *bufio.Scanner {
+	file, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return col, row
+
+	return bufio.NewScanner(file)
 }
 
-// GetInputSlice get the maze elements from user
-func GetInputSlice() []string {
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	return strings.Fields(scanner.Text())
-}
-
-// GetMazeElements stores the maze elements taken by GetInputSlice in a slice
-func GetMazeElements(
-	mazeRow int,
-) []string {
-	var mazeElements []string
-	for i := 0; i < mazeRow; i++ {
-		mazeElements = append(GetInputSlice(), mazeElements...)
+// GetMazeCoordinatesFromFile returns the maze col and the maze row
+func GetMazeCoordinatesFromFile(
+	fileScanner *bufio.Scanner,
+) (int, int) {
+	fileScanner.Scan()
+	res := strings.Split(fileScanner.Text(), ", ")
+	mazeRow, err := strconv.Atoi(res[0])
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	mazeCol, err := strconv.Atoi(res[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return mazeRow, mazeCol
+}
+
+// GetMazeElementsFromFile returns the maze elements
+func GetMazeElementsFromFile(
+	mazeElements []string,
+	mazeRow int,
+	fileScanner *bufio.Scanner,
+) []string {
+
+	for i := 0; i < mazeRow; i++ {
+		fileScanner.Scan()
+		mazeElements = append(strings.Fields(fileScanner.Text()), mazeElements...)
+	}
+
 	return mazeElements
+}
+
+// GetMazeFromFile returns the maze col and row and also the maze elements
+func GetMazeFromFile(
+	filePath string,
+) [][]string {
+	var mazes [][]string
+	var mazeCol int
+	var mazeRow int
+	var mazeElements []string
+	fileScanner := CreateFileScanner(filePath)
+
+	for fileScanner.Scan() {
+		if fileScanner.Text() == "MAZE" {
+			mazeElements = []string{}
+			mazeRow, mazeCol = GetMazeCoordinatesFromFile(fileScanner)
+			mazeElements = append(mazeElements, strconv.Itoa(mazeRow), strconv.Itoa(mazeCol))
+		}
+		mazeElements = GetMazeElementsFromFile(mazeElements, mazeRow, fileScanner)
+		mazes = append(mazes, mazeElements)
+	}
+
+	return mazes
 }
 
 // RemoveSpecialCharacter removes all barriers, in this case "%" sign
@@ -48,12 +89,12 @@ func RemoveSpecialCharacter(
 ) ([]string, []int) {
 	var mazeElementsIndex []int
 	var mazeElementsRemovedChar []string
-	for j, v := range maze {
+	for i, v := range maze {
 		if v != element {
 			mazeElementsRemovedChar = append(mazeElementsRemovedChar, v)
-			mazeElementsIndex = append(mazeElementsIndex, j)
+			mazeElementsIndex = append(mazeElementsIndex, i)
 		}
-		if ((j+1)%mazeCol) == 0 && j+1 >= mazeCol && j+1 < mazeRow*mazeCol {
+		if ((i+1)%mazeCol) == 0 && i+1 >= mazeCol && i+1 < mazeRow*mazeCol {
 			mazeElementsRemovedChar = append(mazeElementsRemovedChar, "up")
 			mazeElementsIndex = append(mazeElementsIndex, -1)
 		}
@@ -161,6 +202,7 @@ func IsExistsLeftWay(
 		(len(mazeSolution) == 0 || len(mazeSolution) > 0 && mazeSolution[len(mazeSolution)-1] != "R")
 }
 
+// RemoveLastElement remove last element of a string slice
 func RemoveLastElement(
 	mazeSolution []string,
 ) (string, []string) {
@@ -223,22 +265,36 @@ func MazeSolution(
 }
 
 func main() {
-	col, row := GetMazeCoordinates()
-	mazeSlice := GetMazeElements(row)
-	mazeRemovedPercent, mazeRemovedPercentIndex := RemoveSpecialCharacter(mazeSlice, col, row, "%")
+	var mazesSlice [][]string
+	var mazeCol int
+	var mazeRow int
 
-	startIndex, startIndexErr := FindMazeStartIndex(mazeRemovedPercent, "S")
-	endIndex, endIndexErr := FindMazeEndIndex(mazeRemovedPercent, "G")
-	if startIndexErr != nil {
-		log.Println(startIndexErr)
+	mazesSlice = GetMazeFromFile("env.txt")
+
+	for i := 0; i < len(mazesSlice); i++ {
+		mazeCol, _ = strconv.Atoi(mazesSlice[i][len(mazesSlice[i])-1])
+		mazeRow, _ = strconv.Atoi(mazesSlice[i][len(mazesSlice[i])-2])
+		_, mazesSlice[i] = RemoveLastElement(mazesSlice[i])
+		_, mazesSlice[i] = RemoveLastElement(mazesSlice[i])
+
+		mazeRemovedPercent, mazeRemovedPercentIndex := RemoveSpecialCharacter(mazesSlice[i], mazeCol, mazeRow, "%")
+		startIndex, startIndexErr := FindMazeStartIndex(mazeRemovedPercent, "S")
+		endIndex, endIndexErr := FindMazeEndIndex(mazeRemovedPercent, "G")
+		if startIndexErr != nil {
+			log.Println(startIndexErr)
+		}
+		if endIndexErr != nil {
+			log.Println(endIndexErr)
+		}
+
+		start := time.Now()
+		result := MazeSolution(mazeRemovedPercentIndex, mazeCol, startIndex, endIndex)
+
+		fmt.Printf("----------------------------- maze %d (%dx%d) --------------------------------\n", i+1, mazeRow, mazeCol)
+		fmt.Printf("the maze solution: %v\n", result)
+		fmt.Printf("program processing time: %v\n", time.Since(start))
+		if i == len(mazesSlice)-1 {
+			fmt.Println("-----------------------------------------------------------------------------")
+		}
 	}
-	if endIndexErr != nil {
-		log.Println(endIndexErr)
-	}
-
-	start := time.Now()
-	result := MazeSolution(mazeRemovedPercentIndex, col, startIndex, endIndex)
-
-	fmt.Printf("the maze solution: %v\n", result)
-	fmt.Printf("program processing time: %v\n", time.Since(start))
 }
